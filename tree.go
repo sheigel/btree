@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"encoding/json"
 )
 
 func main() {
@@ -37,16 +38,23 @@ func main() {
 	}
 
 	tree.Insert(8)
+	tree.printString()
 	tree.Insert(5)
+	tree.printString()
 	tree.Insert(3)
+	tree.printString()
 	tree.Insert(2)
+	tree.printString()
 	tree.Insert(4)
+	tree.printString()
 	tree.Insert(10)
+	tree.printString()
 	tree.Insert(12)
+	tree.printString()
 	tree.Insert(11)
+	tree.printString()
 	tree.Insert(13)
-
-	fmt.Println(tree.String())
+	tree.printString()
 
 	fmt.Printf("searching for key: %d = %+v\n", 10, tree.Search(10))
 
@@ -55,9 +63,10 @@ func main() {
 }
 
 type Node struct {
-	Key   int
-	Left  *Node
-	Right *Node
+	Key    int   `json:"k"`
+	Left   *Node `json:"l"`
+	Right  *Node `json:"r"`
+	parent *Node
 }
 
 func Traverse(n *Node, callback func(*Node) bool) {
@@ -88,24 +97,19 @@ func (n *Node) IsBalanced() bool {
 	var leftHeight = height(n.Left)
 	var rightHeight = height(n.Right)
 
-	return math.Abs(float64(leftHeight-rightHeight)) <= 0 && n.Left.IsBalanced() && n.Right.IsBalanced()
+	return math.Abs(float64(leftHeight-rightHeight)) <= 1 && n.Left.IsBalanced() && n.Right.IsBalanced()
 }
 
 type Tree struct {
 	Root *Node
 }
 
+func (t *Tree) printString() {
+	res1B, _ := json.MarshalIndent(t.Root, "", "       ")
+	fmt.Println("tree", string(res1B))
+}
 func (t *Tree) Traverse(callback func(*Node) bool) {
 	Traverse(t.Root, callback)
-}
-
-func (t *Tree) String() string {
-	var str = ""
-	t.Traverse(func(n *Node) bool {
-		str += fmt.Sprintf("k:%d ", n.Key)
-		return false
-	})
-	return str
 }
 
 func (t *Tree) Search(key int) *Node {
@@ -122,18 +126,103 @@ func (t *Tree) Search(key int) *Node {
 
 	return foundNode
 }
-func findInsertionPointer(key int, n *Node) **Node {
+func Insert(key int, n *Node) *Node {
 	if key < n.Key {
 		if n.Left == nil {
-			return &n.Left
+			n.Left = &Node{
+				Key:    key,
+				parent: n,
+			}
+			return n.Left
 		}
-		return findInsertionPointer(key, n.Left)
+		return Insert(key, n.Left)
 	} else {
 		if n.Right == nil {
-			return &n.Right
+			n.Right = &Node{
+				Key:    key,
+				parent: n,
+			}
+			return n.Right
 		}
-		return findInsertionPointer(key, n.Right)
+		return Insert(key, n.Right)
 	}
+}
+
+func findUnbalancePath(n *Node) (*Node, *Node, *Node) {
+	var (
+		a *Node
+		b *Node
+		c *Node
+	)
+	for ; n != nil; n = n.parent {
+		c = b
+		b = a
+		a = n
+		if !n.IsBalanced() {
+			return a, b, c
+		}
+	}
+	return nil, nil, nil
+}
+
+func rightRotate(to *Node) {
+	var parent = to.parent
+	var from = to.Left
+	if parent != nil {
+		if parent.Left == to {
+			parent.Left = from
+		}
+		if parent.Right == to {
+			parent.Right = from
+		}
+	}
+	to.Left = from.Right
+	from.Right = to
+	from.parent = to.parent
+	to.parent = from
+}
+func leftRotate(to *Node) {
+	var parent = to.parent
+	var from = to.Right
+	if parent != nil {
+		if parent.Left == to {
+			parent.Left = from
+		}
+		if parent.Right == to {
+			parent.Right = from
+		}
+	}
+	to.Right = from.Left
+	from.Left = to
+	from.parent = to.parent
+	to.parent = from
+}
+
+func BalanceFrom(n *Node) {
+	a, b, c := findUnbalancePath(n)
+	if a == nil {
+		return
+	}
+	if a.Left == b && b.Left == c {
+		rightRotate(a)
+	} else if a.Left == b && b.Right == c {
+		leftRotate(b)
+		rightRotate(a)
+	} else if a.Right == b && b.Right == c {
+		leftRotate(a)
+	} else if a.Right == b && b.Left == c {
+		rightRotate(b)
+		leftRotate(a)
+	}
+	m, _ := json.Marshal([] int{a.Key, b.Key, c.Key})
+	fmt.Println("key=", n.Key, " unbalancePath ", string(m))
+}
+
+func findNewRoot(candidate *Node) *Node {
+	if candidate.parent != nil {
+		return findNewRoot(candidate.parent)
+	}
+	return candidate
 }
 
 func (t *Tree) Insert(key int) {
@@ -142,8 +231,8 @@ func (t *Tree) Insert(key int) {
 		return
 	}
 
-	var insertionPointer = findInsertionPointer(key, t.Root)
+	var insertedNode = Insert(key, t.Root)
 
-	node := Node{Key: key}
-	*insertionPointer = &node
+	BalanceFrom(insertedNode)
+	t.Root = findNewRoot(t.Root)
 }
